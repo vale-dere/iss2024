@@ -1,0 +1,102 @@
+System boundarybasicrobot
+
+//per adesso il robot si muove, riprendi da qui
+
+Request step       	  : step(TIME)
+Reply 	stepfailed    : stepfailed(DURATION, CAUSE) for step
+Reply 	stepdone      : stepdone(V)         for step
+
+Dispatch setdirection : dir( D )
+	
+Request engage     	  : engage(CALLER, STEP)
+Reply   engagedone    : engagedone(ARG)    for engage
+Reply   engagerefused : engagerefused(ARG) for engage
+
+
+Context ctxboundarybasicrobot ip [host="localhost" port=8000]
+Context ctxbasicrobot ip [host="127.0.0.1" port=8020]
+
+ExternalQActor basicrobot context ctxbasicrobot
+
+
+
+QActor boundarybasicrobot context ctxboundarybasicrobot{
+	[#
+		var OWNER = "$name"; 
+		var STEPSDONE=0;
+		var N = 0
+	#]
+		
+	State s0 initial{
+		println("$name request engage") color green
+		request basicrobot -m engage : engage($OWNER, 350)
+		
+	}
+	Transition t0 
+		whenReply engagedone     ->  handleEngageDone
+		whenReply engagerefused  ->  handleEngageRefused
+				
+	
+	State handleEngageDone{
+    	println("engage $name done") color green
+    	
+    	delay 100
+    	
+    	request basicrobot -m step : step(350)
+    }
+    Transition t0
+    	whenReply stepdone -> handleStepDone
+    	whenReply stepfailed -> handleStepFailed
+    
+    State handleEngageRefused{
+    	println("engage $name refused")
+    }
+    
+    State handleStepDone{
+    	//println("step done")
+    	//stepdone ai fini del calcolo del perimetro
+    	[#
+    		STEPSDONE += 1; 
+    	#]
+    	
+    	delay 100
+  		request basicrobot -m step : step(350)
+    }
+    //Goto s0 
+    Transition t0
+  		whenReply stepdone -> handleStepDone
+  		whenReply stepfailed -> handleStepFailed
+    
+    State handleStepFailed{
+    	[# N = N + 1 #]
+    	//println("$N wall hit") color green
+    	if [# N == 1 #]{
+				forward basicrobot -m setdirection : dir(right)
+			}
+		if [# N == 2 #]{
+				forward basicrobot -m setdirection : dir(up)
+			}
+    	if [# N == 3 #]{
+				forward basicrobot -m setdirection : dir(left)
+			}
+  
+  		//println("$STEPSDONE steps done") color blue
+  
+  		delay 500
+  		
+  		if [# N == 4 #]{
+  				println("boundary done") color green
+  				println("the perimeter is $STEPSDONE long") color blue
+				[# System.exit(0) #]
+				//updateResource [# "boundaryBasicrobot(end)" #]	
+			}
+  		
+  		request basicrobot -m step : step(350)
+  		
+  		
+    }
+    //Goto handleStepDone
+     Transition t0
+  		whenReply stepdone -> handleStepDone
+  		whenReply stepfailed -> handleStepFailed 
+}
